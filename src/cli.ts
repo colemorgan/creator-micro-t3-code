@@ -78,6 +78,7 @@ async function run() {
     if (stopping) return;
     stopping = true;
     log.info("stopping");
+    await controller.releaseHeldKeys();
     controller.dispose();
     for (const environment of environments) environment.stop();
     await device.stop();
@@ -207,6 +208,17 @@ async function action(name: string | undefined) {
   process.exit(0);
 }
 
+/** Releases every modifier the bridge can hold, in case one is stuck down. */
+async function releaseKeys() {
+  const { execFileSync } = await import("node:child_process");
+  const { holdKeyScript, parseShortcut } = await import("./host/shortcut.ts");
+  for (const key of ["fn", "command", "shift", "option", "control"]) {
+    execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", holdKeyScript(parseShortcut(key)!, false)]);
+  }
+  console.log("Released Fn, Command, Shift, Option and Control.");
+  process.exit(0);
+}
+
 /** Reports the macOS permissions the bridge needs, as seen by this process. */
 async function permissions() {
   const { execFileSync } = await import("node:child_process");
@@ -288,6 +300,7 @@ const commands: Record<string, () => unknown> = {
   rpc: () => rpc(args[0], args[1]),
   action: () => action(args[0]),
   permissions,
+  "release-keys": releaseKeys,
 };
 const handler = command ? commands[command] : undefined;
 if (!handler) {

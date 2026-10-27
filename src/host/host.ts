@@ -88,10 +88,21 @@ end tell`;
 
   // Key events are posted directly (CoreGraphics): System Events refuses
   // keystrokes from a background agent even with Accessibility granted.
-  async press(...strokes: Keystroke[]): Promise<void> {
-    const appPath = await this.appPath();
-    await run("/usr/bin/open", ["-a", appPath]);
-    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", pressScript(strokes, appPath)]);
+  // Every key event goes through one queue: a release must never overtake its
+  // press, or the system is left believing the key is still held.
+  private keys: Promise<unknown> = Promise.resolve();
+  private inOrder<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.keys.then(task, task);
+    this.keys = next.catch(() => {});
+    return next;
+  }
+
+  press(...strokes: Keystroke[]): Promise<void> {
+    return this.inOrder(async () => {
+      const appPath = await this.appPath();
+      await run("/usr/bin/open", ["-a", appPath]);
+      await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", pressScript(strokes, appPath)]);
+    });
   }
 
   private dictationMenu(prefix: string): Promise<string> {
@@ -109,8 +120,10 @@ end tell`;
     });
   }
 
-  async holdKey(stroke: Keystroke, down: boolean): Promise<void> {
-    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", holdKeyScript(stroke, down)]);
+  holdKey(stroke: Keystroke, down: boolean): Promise<void> {
+    return this.inOrder(async () => {
+      await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", holdKeyScript(stroke, down)]);
+    });
   }
 }
 

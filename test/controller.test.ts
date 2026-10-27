@@ -306,3 +306,10 @@ test("auto-dim turns everything off and input brings it back", () => {
   assert.ok((lights.frames.at(-1) as any).slots[0].b > 0);
   controller.dispose();
 });
+
+test("stopping the bridge mid-recording releases the held key", async () => {
+  const { controller } = setup([thread({ id: "a" })], { mic: { mode: "hold", shortcut: "fn" } });
+  controller.handleInput({ type: "key", key: "ACT10", act: 1 });
+  await controller.releaseHeldKeys();
+  assert.deepEqual(host.calls, ["hold fn", "release fn"]);
+});

@@ -253,6 +253,14 @@ export class Controller {
     void this.lights.setLighting(this.frame());
   }
 
+  /** Lets go of a key held for push-to-talk, e.g. when the bridge stops. */
+  async releaseHeldKeys(): Promise<void> {
+    if (this.voice !== "recording" || this.config.mic.mode !== "hold") return;
+    this.voice = "idle";
+    this.mic = { kind: "idle" };
+    await this.holdKey(this.config.mic.shortcut, false).catch(() => {});
+  }
+
   dispose(): void {
     for (const timer of [
       this.flashTimer,
@@ -452,6 +460,7 @@ export class Controller {
       if (recording) {
         this.voice = "idle";
         this.mic = { kind: "idle" };
+        if (mic.mode === "hold") void this.holdKey(mic.shortcut, false).catch(() => {});
         this.unavailable("dictation failed");
       }
     });
