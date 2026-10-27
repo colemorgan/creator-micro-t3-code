@@ -1,9 +1,28 @@
 {
-  "name": "codex-micro-t3",
+  "name": "creator-micro-t3-code",
   "version": "0.1.0",
-  "description": "Bridge the Work Louder Codex Micro / Creator Micro to T3 Code",
-  "type": "module",
+  "description": "Use a Work Louder Creator Micro 2 or Codex Micro with T3 Code: live agent-key lights, approvals, push-to-talk, and more",
+  "keywords": [
+    "t3-code",
+    "work-louder",
+    "creator-micro",
+    "codex-micro",
+    "macropad",
+    "hid",
+    "coding-agents"
+  ],
+  "homepage": "https://github.com/colemorgan/creator-micro-t3-code#readme",
+  "bugs": {
+    "url": "https://github.com/colemorgan/creator-micro-t3-code/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colemorgan/creator-micro-t3-code.git"
+  },
   "license": "MIT",
+  "author": "Cole Morgan",
+  "private": true,
+  "type": "module",
   "bin": {
     "codex-micro-t3": "./src/cli.ts"
   },
@@ -23,5 +42,6 @@
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
     "typescript": "^7.0.2"
-  }
+  },
+  "packageManager": "pnpm@12.15.0"
 }

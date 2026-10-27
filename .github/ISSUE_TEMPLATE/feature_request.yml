@@ -1,0 +1,16 @@
+name: Feature request
+description: A new action, mapping, or behaviour
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the workflow, e.g. "I run 20 threads and want to …"
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Which control, and what it should do.

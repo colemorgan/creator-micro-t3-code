@@ -1,134 +1,139 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# Creator Micro T3 Code Adapter
+# Creator Micro for T3 Code
 
-Use a Work Louder **Codex Micro** or **Creator Micro 2** (on its Codex layer)
-with [T3 Code](https://t3.codes), the way the ChatGPT app uses it for Codex.
+[![CI](https://github.com/colemorgan/creator-micro-t3-code/actions/workflows/ci.yml/badge.svg)](https://github.com/colemorgan/creator-micro-t3-code/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-It's a small background program, not firmware: the keyboard's stock firmware
-already reports every key, the knob and the stick, and takes lighting
-commands, over its vendor HID channel. The bridge reads that channel and
-drives T3 Code through its server API and a few app shortcuts.
+Use a Work Louder **Creator Micro 2** or **Codex Micro** with
+[T3 Code](https://t3.codes), the way the ChatGPT desktop app uses it for
+Codex. The six agent keys show your threads' status, and the other keys
+approve, decline, fork, send, and push-to-talk.
+
+The keyboard keeps its stock firmware. Its firmware already reports every key,
+the knob and the joystick, and accepts lighting commands, over a vendor HID
+channel. This bridge is a small background program that reads that channel.
+It drives T3 Code through the T3 Code server's API and a few app shortcuts.
+
+> **Status:** early (0.1). It's used daily on macOS with a Creator Micro 2
+> over Bluetooth and T3 Code 0.1.3. Other setups should work, but nobody has
+> tested them yet. [Reports are welcome](https://github.com/colemorgan/creator-micro-t3-code/issues).
 
 ## What the keys do
 
-Factory Codex layout, mapped to T3 Code:
+The keys follow the Codex factory layout, mapped to T3 Code:
 
 | Control | Action |
 |---|---|
-| Agent keys 1–6 | Six threads across all your T3 Code servers, following the sidebar: when it's filtered to a project, only that project's threads; settled threads only while they're working or need you. Colour shows status: white idle, blue working, green finished and unread, amber needs you, red error. The selected thread breathes. Tap to open it in the background; double-tap to bring T3 Code forward. |
-| FAST | Toggle Fast mode on the selected thread (Claude Fast Mode, Codex priority tier) |
-| APPR / REJ | Approve or decline the selected thread's pending request (or the only waiting one on the keys) |
-| SPLIT | Fork the selected thread and open the fork |
-| MIC (wide key) | Push to talk: hold to record; double-tap to keep recording, tap again to stop |
-| CODEX | Send the composer |
-| Stick | Up: Plan mode on/off · Left/Right: back/forward · Down: sidebar |
-| Knob | Navigation mode: turn for ↑/↓, click for Enter (works in pickers). Hold to switch to Reasoning mode (turn to change effort) or Agents mode (turn to step through the agent keys). The ring flashes the mode's colour. |
+| **Agent keys 1–6** | Six threads across all your T3 Code servers. Each colour is a status: white is idle, blue is working, green is finished but unread, amber needs you, and red is an error. The selected thread's key breathes. Tap a key to open its thread in the background; double-tap to also bring T3 Code forward. |
+| **FAST** | Toggles Fast mode on the selected thread: Claude's Fast Mode, or Codex's priority tier. |
+| **APPR / REJ** | Approves or declines the selected thread's pending request. If the selected thread has none, it acts on the only waiting thread among the keys. |
+| **SPLIT** | Forks the selected thread and opens the fork. |
+| **MIC** (wide key) | Push to talk: hold to record. Double-tap to keep recording, and tap again to stop. |
+| **CODEX** | Sends the composer. |
+| **Joystick** | Up toggles Plan mode, left/right go back/forward, and down toggles the sidebar. |
+| **Knob** | Turning sends ↑/↓ and clicking sends Enter, so it can drive pickers. Hold the knob to switch modes: **Reasoning** (turning changes effort) or **Agents** (turning steps through the agent keys). The ring flashes the mode's colour. |
 
-Lighting follows the factory behaviour: the ring stays dark except while
-recording, while the selected thread works, or briefly after the selection
-changes, and everything goes dark after three minutes idle.
+**Which threads get keys.** The keys follow the T3 Code sidebar. When the
+sidebar is filtered to a project, only that project's threads get keys.
+Settled threads are left off unless they're working or need you. The order
+of the remaining threads is configurable: most recent, most urgent, or your
+pinned threads.
 
-## Setup (macOS)
+**When there are more than six threads.** Map any key to `nextAttention`. Each
+press opens the next thread that needs a look, in this order: needs you,
+error, finished and unread, then working. It covers every matching thread,
+not just the six on keys.
 
-Requires Node 24+ and pnpm.
+Every control can be remapped: see [Configuration](docs/configuration.md).
+
+**Lighting** follows the factory behaviour. The ring stays dark except while
+you're recording, while the selected thread is working, or briefly after the
+selection changes. Everything goes dark after three minutes of inactivity.
+
+## Requirements
+
+- A Work Louder **Creator Micro 2** (switched to its **Codex layer**) or a
+  **Codex Micro**, connected over USB or Bluetooth.
+- **macOS** for the full feature set. On Linux, the device, lights and
+  server actions work; keyboard shortcuts need `wtype` or `xdotool`, and
+  following the sidebar filter is macOS-only.
+- **Node.js 24+** and **pnpm**.
+- **T3 Code** 0.1.x (desktop app, and/or a remote T3 Code server).
+
+## Quick start (macOS)
 
 ```sh
-git clone <this repo> ~/codex-micro-t3 && cd ~/codex-micro-t3
+git clone https://github.com/colemorgan/creator-micro-t3-code.git ~/creator-micro-t3-code
+cd ~/creator-micro-t3-code
 pnpm install
+```
 
-# For each T3 Code server you use (the desktop app's own server is on :3773),
-# mint a token that can only read and operate threads:
+Connect it to T3 Code. For each server you use (the desktop app's own server
+listens on port 3773), create a token that can only read and operate threads,
+then pair it:
+
+```sh
 t3 auth session issue --scope orchestration:read --scope orchestration:operate \
-  --label "Codex Micro bridge" --token-only
+  --label "Creator Micro bridge" --token-only
 node src/cli.ts pair http://127.0.0.1:3773 <token>
-node src/cli.ts pair http://<remote-host>:3773 <token>   # optional
+node src/cli.ts pair http://<remote-host>:3773 <token>   # optional, per remote server
+```
 
+Install it to start at login:
+
+```sh
 node src/cli.ts install
 ```
 
-`install` creates `~/Applications/Codex Micro for T3 Code.app` and a login
-agent. In **System Settings → Privacy & Security**, allow it under **Input
-Monitoring** and **Accessibility**, then run `node src/cli.ts restart`. Quit
-the ChatGPT app: it drives the same lights.
-
-Switch the keyboard to its Codex layer.
-
-## Configuration
-
-`~/.config/codex-micro-t3/config.json` (written by `pair`, owner-only since it
-holds tokens). Everything except `environments` is optional:
-
-```jsonc
-{
-  "environments": [{ "url": "http://127.0.0.1:3773", "token": "…" }],
-  "app": { "name": "T3 Code (Beta)", "scheme": "t3code", "dataDir": "t3code-v2" },
-  "agentSource": "recent",           // or "priority" (needs-you first), "pinned"
-  "followSidebar": true,              // mirror the sidebar's project filter and hide settled threads
-  "pins": [null, null, null, null, null, null], // "environmentId/threadId" per key
-  "knobMode": "navigation",           // or "reasoning", "agents"
-  "brightness": 1,
-  "autoDimMs": 180000,                // null to never dim
-  "mic": { "mode": "hold", "shortcut": "fn" }, // Typeless/Wispr Flow hold Fn;
-                                      // "dictation" uses macOS Dictation;
-                                      // "shortcut" presses a toggle shortcut
-  "sendShortcut": "enter",
-  "controls": {                       // remap any command key or stick direction
-    "ACT06": "fast", "ACT07": "approve", "ACT08": "decline", "ACT09": "fork",
-    "ACT10": "mic", "ACT12": "send",
-    "JOY_UP": "togglePlanMode", "JOY_RIGHT": "command:navigation.forward",
-    "JOY_DOWN": "command:sidebar.toggle", "JOY_LEFT": "command:navigation.back"
-  },
-  "logLevel": "info"
-}
-```
-
-Actions: `nextAttention` (open the next thread that needs a look: needs you,
-error, finished and unread, then working; across every thread in the sidebar's
-filter, not just the six on keys), `fast`, `approve`, `approveForSession`, `decline`, `stop`, `fork`,
-`mic`, `send`, `togglePlanMode`, `increaseEffort`, `decreaseEffort`,
-`nextSlot`, `previousSlot`, `focusApp`, `none`, `command:<T3 keybinding id>`
-(e.g. `command:terminal.toggle`), or `keys:<shortcut>` (e.g. `keys:cmd+shift+e`).
-
-## Commands
-
-```
-node src/cli.ts status        servers, and what each agent key shows
-node src/cli.ts session doctor   device check, light test, live input (with the app's permissions)
-node src/cli.ts session permissions
-node src/cli.ts action <name> run one action as if pressed
-node src/cli.ts rpc <device.status|sys.version|fs.list|fs.read> [params]   read-only device calls
-```
-
-Logs: `~/Library/Logs/codex-micro-t3.log`.
-
-## How it works
-
-- **Device** (`src/device`): node-hid on the vendor collection (usage page
-  `0xFF00`, report 6), newline-delimited JSON-RPC: `v.oai.hid`/`v.oai.rad`
-  notifications in, `v.oai.thstatus` (agent keys) and `v.oai.rgbcfg` (ring
-  and backlight) out. Framing is probed with `device.status`.
-- **T3 Code** (`src/t3`): Effect RPC over `/ws?orchestrationProtocol=2` with
-  a bearer token; `orchestration.subscribeShell` for thread state and
-  `orchestration.dispatchCommand` for approve, interrupt, fork, plan mode and
-  model options.
-- **Sidebar filter** (`src/host/sidebarScope.ts`): the app keeps the
-  project filter in its localStorage (LevelDB under
-  `~/Library/Application Support/t3code-v2`); the bridge reads the newest
-  write and matches it to projects the way the sidebar groups them.
-- **App** (`src/host`): `t3code://threads/<env>/<thread>` links open threads;
-  CoreGraphics key events press T3 Code shortcuts (only once it's frontmost)
-  and hold Fn for dictation apps.
-
-Thread status follows T3 Code's sidebar; lighting follows the Codex app's
-factory defaults as documented by
-[FreeMicro](https://github.com/eliBenven/freemicro). The HID framing and slot
-assignment are adapted from Hormold's in-app integration
-([t3code#23869](https://github.com/pingdotgg/t3code/pull/23869), MIT).
-
-## Development
+This creates `~/Applications/Codex Micro for T3 Code.app` and a login agent.
+In **System Settings → Privacy & Security**, turn on **Codex Micro for T3
+Code** under both **Input Monitoring** and **Accessibility**. Then run:
 
 ```sh
-pnpm test        # node:test, no device or server needed
-pnpm typecheck
+node src/cli.ts restart
 ```
+
+Finally:
+
+1. Quit the ChatGPT desktop app, which drives the same lights.
+2. Switch the keyboard to its Codex layer.
+3. Check what the bridge sees:
+
+```sh
+node src/cli.ts status                 # servers, and what each agent key shows
+node src/cli.ts session doctor         # device check, light test, live input
+```
+
+Logs are in `~/Library/Logs/codex-micro-t3.log`.
+
+## Documentation
+
+- [Configuration](docs/configuration.md): every option and action
+- [Troubleshooting](docs/troubleshooting.md): permissions, layers, stuck keys
+- [Architecture](docs/architecture.md): how the device protocol, T3 Code API
+  and macOS integration fit together
+- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+  [Code of Conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md)
+
+## Credits
+
+- The HID framing and agent-key assignment are adapted from Hormold's in-app
+  T3 Code integration,
+  [pingdotgg/t3code#23869](https://github.com/pingdotgg/t3code/pull/23869)
+  (MIT).
+- The Codex factory behaviour (colours, timings, key layout) follows
+  [FreeMicro](https://github.com/eliBenven/freemicro)'s interoperability notes,
+  and [work-louder-oai](https://github.com/boopdotpng/work-louder-oai)'s
+  protocol notes.
+
+## Disclaimer
+
+This is an independent project. It isn't affiliated with or endorsed by Work
+Louder, OpenAI, or T3 Tools. "Creator Micro" and "Codex Micro" are Work
+Louder's names, "Codex" and "ChatGPT" are OpenAI's, and "T3 Code" is T3
+Tools'. They're used here only to describe compatibility.
+
+## License
+
+[MIT](LICENSE)
