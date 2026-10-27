@@ -15,8 +15,9 @@ The bridge acts on your behalf, so it holds sensitive access. The things to
 know:
 
 - **T3 Code tokens.** These are stored in
-  `~/.config/codex-micro-t3/config.json`, which only your user can read
-  (mode `0600`). Create them with only `orchestration:read` and
+  `~/.config/codex-micro-t3/config.json`. `pair` saves it so only your user
+  can read it (mode `0600`); if you create or edit it yourself, run
+  `chmod 600` on it. Create them with only `orchestration:read` and
   `orchestration:operate`: they can read threads and approve, decline,
   interrupt, fork and change the model settings of threads. Revoke one with
   `t3 auth session revoke`.

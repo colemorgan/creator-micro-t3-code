@@ -17,7 +17,7 @@ body:
     id: device
     attributes:
       label: Keyboard, connection and firmware
-      description: "From `node src/cli.ts session rpc device.status`"
+      description: "From `node src/cli.ts session rpc device.status` (macOS) or `node src/cli.ts rpc device.status` (Linux)"
       placeholder: Creator Micro 2, Bluetooth, 0.6.3-rc.19
     validations:
       required: true

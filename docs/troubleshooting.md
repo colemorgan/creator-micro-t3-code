@@ -98,4 +98,5 @@ which one to answer. Select the thread you mean with its agent key first.
 
 The bridge reconnects to each server on its own and resubscribes. If it
 can't (the log shows `HTTP 401`), the token was revoked or has expired.
-Create a new one and run `pair` again.
+Create a new one, run `pair` again, then `node src/cli.ts restart`: the
+running bridge only reads the config at startup.

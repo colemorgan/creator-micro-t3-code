@@ -80,6 +80,10 @@ node src/cli.ts pair http://127.0.0.1:3773 <token>
 node src/cli.ts pair http://<remote-host>:3773 <token>   # optional, per remote server
 ```
 
+The token travels in the connection handshake. For a remote server, use
+`https://`, or plain `http://` only over a private network you trust, such as
+Tailscale.
+
 Install it to start at login:
 
 ```sh

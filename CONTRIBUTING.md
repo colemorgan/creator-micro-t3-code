@@ -10,6 +10,7 @@ using the bug template. Include:
 
 - your keyboard (Creator Micro 2 or Codex Micro), the connection (USB or
   Bluetooth), and the firmware version from `node src/cli.ts session rpc device.status`
+  (macOS) or `node src/cli.ts rpc device.status` (Linux)
 - your OS and Node version, and your T3 Code version
 - the relevant part of `~/Library/Logs/codex-micro-t3.log`, with
   `"logLevel": "debug"` if you can reproduce it

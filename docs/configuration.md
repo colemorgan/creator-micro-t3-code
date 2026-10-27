@@ -1,11 +1,19 @@
 # Configuration
 
-The bridge reads `~/.config/codex-micro-t3/config.json`, or the path in the
-`CODEX_MICRO_T3_CONFIG` environment variable. `pair` creates the file and
-saves it so only your user can read it, because it holds bearer tokens.
+The bridge reads `~/.config/codex-micro-t3/config.json`. `pair` creates the
+file and saves it so only your user can read it, because it holds bearer
+tokens. If you create or edit it yourself, keep it private
+(`chmod 600`).
+
+For one-off CLI runs, the `CODEX_MICRO_T3_CONFIG` environment variable points
+at a different file. The login agent doesn't inherit your shell's
+environment, so it always reads the default path.
 
 Every field except `environments` is optional. A missing or invalid value
 falls back to its default on its own, without affecting the other fields.
+Two exceptions: a file that isn't valid JSON stops the bridge from starting,
+and an action name in `controls` isn't checked, so a typo such as `"fasst"`
+leaves that key doing nothing.
 The bridge reads the file once at startup, so restart it after editing
 (`node src/cli.ts restart` on macOS).
 
@@ -96,6 +104,10 @@ Following the filter is macOS-only, because it reads the app's local storage.
 
 Six entries, one per agent key: `null`, or `"<environmentId>/<threadId>"` to
 fix a thread to that key. The other keys fill from `agentSource` as usual.
+Pins apply after the sidebar filter: with `followSidebar` on, a pinned thread
+outside the filtered project, or a settled idle one, isn't shown, and its key
+goes to the next thread in line. Set `followSidebar` to `false` to always
+show pinned threads.
 `node src/cli.ts status` shows each server's environment id.
 
 ### `knobMode`
