@@ -6,7 +6,8 @@
 // T3 Code integration (MIT, https://github.com/pingdotgg/t3code/pull/23869).
 
 export const WORK_LOUDER_VENDOR_ID = 0x303a;
-export const CODEX_MICRO_PRODUCT_ID = 0x8360;
+/** Codex Micro, and the Creator Micro 2 over USB and Bluetooth: same vendor channel. */
+export const PRODUCT_IDS: ReadonlySet<number> = new Set([0x8360, 0x8297, 0x8298]);
 export const VENDOR_USAGE_PAGE = 0xff00;
 
 const REPORT_ID = 6;
@@ -120,7 +121,7 @@ export function findEndpoints(devices: ReadonlyArray<HidCandidate>): Endpoint[] 
     (device) =>
       device.path &&
       device.vendorId === WORK_LOUDER_VENDOR_ID &&
-      device.productId === CODEX_MICRO_PRODUCT_ID,
+      PRODUCT_IDS.has(device.productId),
   );
   // hidapi lists one entry per collection. When the platform reports usage
   // pages, only the vendor collection is usable; otherwise take what's there.

@@ -1,16 +1,22 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Config, defaultConfigPath, loadConfig, saveConfig } from "./config.ts";
+import { type ActionName, type Config, defaultConfigPath, loadConfig, saveConfig } from "./config.ts";
 import { Controller } from "./controller.ts";
 import { CodexMicroDevice, listEndpoints, sleep } from "./device/device.ts";
 import { lightingFrame, STATUS_COLORS } from "./device/lighting.ts";
 import { RPC_METHODS } from "./device/protocol.ts";
 import { createHost } from "./host/host.ts";
+import {
+  APP_DIR,
+  APP_NAME,
+  installAgent,
+  LOG_FILE,
+  restartAgent,
+  runInSession,
+  uninstallAgent,
+} from "./host/launchAgent.ts";
 import { createLogger } from "./log.ts";
 import { T3Environment } from "./t3/environment.ts";
 
@@ -21,12 +27,16 @@ Usage:
   codex-micro-t3 pair <url> <token>      Add a T3 Code server (token from \`t3 auth session issue\`)
   codex-micro-t3 status                  Show servers and what each agent key would show
   codex-micro-t3 doctor [seconds]        Check the device: status, light test, then print input
-  codex-micro-t3 install                 Start at login (macOS LaunchAgent)
-  codex-micro-t3 uninstall               Remove the LaunchAgent
+  codex-micro-t3 install                 Start at login (macOS login agent)
+  codex-micro-t3 restart                 Restart the login agent
+  codex-micro-t3 uninstall               Remove the login agent
+  codex-micro-t3 session <command>       Run a command with the agent's macOS permissions
+  codex-micro-t3 rpc <method> [params]   Read-only device call (device.status, fs.list, fs.read…)
+  codex-micro-t3 action <name>           Run one action as if its key were pressed
 
 Config: ${defaultConfigPath()}`;
 
-const LABEL = "dev.t3.codex-micro";
+const CLI_PATH = resolve(fileURLToPath(import.meta.url));
 
 function environmentsOf(config: Config, log = createLogger(config.logLevel)) {
   return config.environments.map((entry) => new T3Environment({ ...entry, log }));
@@ -177,55 +187,92 @@ async function doctor(seconds: number) {
   process.exit(0);
 }
 
-function install() {
-  if (process.platform !== "darwin") throw new Error("install is for macOS; use a systemd user unit elsewhere");
-  const cli = resolve(fileURLToPath(import.meta.url));
-  const plist = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
-  const logFile = join(homedir(), "Library", "Logs", "codex-micro-t3.log");
-  const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  mkdirSync(dirname(plist), { recursive: true });
-  writeFileSync(
-    plist,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${escape(process.execPath)}</string>
-    <string>${escape(cli)}</string>
-    <string>run</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ProcessType</key><string>Interactive</string>
-  <key>StandardOutPath</key><string>${escape(logFile)}</string>
-  <key>StandardErrorPath</key><string>${escape(logFile)}</string>
-</dict>
-</plist>
-`,
-  );
-  const domain = `gui/${process.getuid!()}`;
-  try {
-    execFileSync("launchctl", ["bootout", `${domain}/${LABEL}`], { stdio: "ignore" });
-  } catch {}
-  execFileSync("launchctl", ["bootstrap", domain, plist]);
-  console.log(`Installed ${plist}\nLogs: ${logFile}`);
+/** Runs one bridge action as if its key were pressed (for testing and scripting). */
+async function action(name: string | undefined) {
+  if (!name) throw new Error("Usage: codex-micro-t3 action <name>, e.g. command:sidebar.toggle");
+  const config = loadConfig();
+  const log = createLogger("debug");
+  const environments = environmentsOf(config, log);
+  for (const environment of environments) environment.start();
+  const deadline = Date.now() + 10_000;
+  while (environments.some((e) => !e.ready) && Date.now() < deadline) await sleep(100);
+  const noop = { setLighting: async () => {}, invalidateLighting() {} };
+  const host = createHost({ appName: config.app.name, scheme: config.app.scheme, log });
+  const controller = new Controller({ ...config, autoDimMs: null }, environments, noop, host, log);
+  controller.refresh();
+  controller.runAction(name as ActionName);
+  await sleep(2_500);
+  controller.dispose();
+  for (const environment of environments) environment.stop();
+  process.exit(0);
+}
+
+/** Reports the macOS permissions the bridge needs, as seen by this process. */
+async function permissions() {
+  const { execFileSync } = await import("node:child_process");
+  const check = (script: string) => {
+    try {
+      return execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], {
+        encoding: "utf8",
+      }).trim();
+    } catch (error) {
+      return `error: ${(error as Error).message.split("\n").at(-2) ?? error}`;
+    }
+  };
+  console.log(`Accessibility (osascript child): ${check('ObjC.import("ApplicationServices"); $.AXIsProcessTrusted()')}`);
   console.log(
-    `\nmacOS will ask for two permissions for ${process.execPath}:\n` +
+    `Input Monitoring: ${check('ObjC.import("IOKit"); ObjC.bindFunction("IOHIDCheckAccess", ["int", ["int"]]); ["granted", "denied", "unknown"][$.IOHIDCheckAccess(1)]')}`,
+  );
+  console.log(
+    `Post events: ${check('ObjC.import("IOKit"); ObjC.bindFunction("IOHIDCheckAccess", ["int", ["int"]]); ["granted", "denied", "unknown"][$.IOHIDCheckAccess(0)]')}`,
+  );
+  process.exit(0);
+}
+
+// Only calls that can't change the device: no fs.write, no bootloader.
+const READ_ONLY_RPC = new Set(["device.status", "sys.version", "fs.list", "fs.read"]);
+
+/** Sends one read-only JSON-RPC call to the device and prints the result. */
+async function rpc(method: string | undefined, params: string | undefined) {
+  if (!method || !READ_ONLY_RPC.has(method)) {
+    throw new Error(`Usage: codex-micro-t3 rpc <${[...READ_ONLY_RPC].join("|")}> [json params]`);
+  }
+  const device = new CodexMicroDevice(createLogger("warn"));
+  device.start();
+  const deadline = Date.now() + 10_000;
+  while (!device.current.connected && Date.now() < deadline) await sleep(100);
+  try {
+    if (!device.current.connected) throw new Error("Device not connected");
+    const result = await device.call(method, params === undefined ? null : JSON.parse(params));
+    console.log(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+  } finally {
+    await device.stop({ blank: false });
+  }
+  process.exit(0);
+}
+
+function install() {
+  if (process.platform !== "darwin") {
+    throw new Error("install is for macOS; on Linux run `codex-micro-t3 run` from a systemd user unit");
+  }
+  installAgent(CLI_PATH);
+  console.log(`Installed "${APP_NAME}" (${APP_DIR}) as a login agent.\nLogs: ${LOG_FILE}`);
+  console.log(
+    `\nIn System Settings → Privacy & Security, allow "${APP_NAME}" under:\n` +
       `  • Input Monitoring (to read the keys)\n  • Accessibility (to press shortcuts in T3 Code)\n` +
-      `Grant both in System Settings → Privacy & Security, then run: launchctl kickstart -k ${domain}/${LABEL}`,
+      `Then run: codex-micro-t3 restart`,
   );
 }
 
 function uninstall() {
-  const plist = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
-  try {
-    execFileSync("launchctl", ["bootout", `gui/${process.getuid!()}/${LABEL}`], { stdio: "ignore" });
-  } catch {}
-  if (existsSync(plist)) rmSync(plist);
-  console.log("Removed the LaunchAgent.");
+  uninstallAgent();
+  console.log("Removed the login agent.");
+}
+
+/** Runs a command as the app bundle in the GUI session (for permissions over SSH). */
+async function session(rest: string[]) {
+  if (rest.length === 0) throw new Error("Usage: codex-micro-t3 session <command> [args]");
+  process.stdout.write(await runInSession(CLI_PATH, rest, 120_000));
 }
 
 const [command, ...args] = process.argv.slice(2);
@@ -236,6 +283,11 @@ const commands: Record<string, () => unknown> = {
   doctor: () => doctor(Number(args[0] ?? 20)),
   install,
   uninstall,
+  restart: () => restartAgent(),
+  session: () => session(args),
+  rpc: () => rpc(args[0], args[1]),
+  action: () => action(args[0]),
+  permissions,
 };
 const handler = command ? commands[command] : undefined;
 if (!handler) {

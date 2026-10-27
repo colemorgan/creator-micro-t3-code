@@ -2,17 +2,19 @@ import { execFile } from "node:child_process";
 
 import type { Logger } from "../log.ts";
 import type { ThreadRef } from "../model/slots.ts";
-import { appleScriptKeystroke, appleScriptString, type Keystroke } from "./shortcut.ts";
+import { appleScriptString, holdKeyScript, type Keystroke, pressScript } from "./shortcut.ts";
 
 /** What the bridge does in the desktop app itself (vs. server commands). */
 export interface Host {
   /** Opens a thread in the app; `foreground` also raises the window. */
   openThread(ref: ThreadRef, foreground: boolean): Promise<void>;
   focusApp(): Promise<void>;
-  /** Brings the app forward and presses `stroke` in it. */
-  press(stroke: Keystroke): Promise<void>;
+  /** Brings the app forward and presses `strokes` in it, in order. */
+  press(...strokes: Keystroke[]): Promise<void>;
   startDictation(): Promise<void>;
   stopDictation(): Promise<void>;
+  /** Holds (`down`) or releases a key system-wide, e.g. Fn for push-to-talk apps. */
+  holdKey(stroke: Keystroke, down: boolean): Promise<void>;
 }
 
 export interface HostOptions {
@@ -62,11 +64,11 @@ set targetId to id of application ${app}
 tell application ${app} to activate
 tell application "System Events"
   repeat 40 times
-    if bundle identifier of first application process whose frontmost is true is targetId then exit repeat
+    if (bundle identifier of (first application process whose frontmost is true)) is targetId then exit repeat
     delay 0.025
   end repeat
-  set frontProcess to first application process whose frontmost is true
-  if bundle identifier of frontProcess is not targetId then error "T3 Code did not come to the front"
+  set frontProcess to (first application process whose frontmost is true)
+  if (bundle identifier of frontProcess) is not targetId then error "T3 Code did not come to the front"
   tell frontProcess
 ${body}
   end tell
@@ -74,8 +76,22 @@ end tell`;
     return run("/usr/bin/osascript", ["-e", script]);
   }
 
-  async press(stroke: Keystroke): Promise<void> {
-    await this.frontmost(`    ${appleScriptKeystroke(stroke)}`);
+  /** Where the app lives, for its bundle id. */
+  private async appPath(): Promise<string> {
+    this.resolvedPath ??= run("/usr/bin/osascript", [
+      "-e",
+      `POSIX path of (path to application ${appleScriptString(this.options.appName)})`,
+    ]);
+    return this.resolvedPath;
+  }
+  private resolvedPath: Promise<string> | undefined;
+
+  // Key events are posted directly (CoreGraphics): System Events refuses
+  // keystrokes from a background agent even with Accessibility granted.
+  async press(...strokes: Keystroke[]): Promise<void> {
+    const appPath = await this.appPath();
+    await run("/usr/bin/open", ["-a", appPath]);
+    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", pressScript(strokes, appPath)]);
   }
 
   private dictationMenu(prefix: string): Promise<string> {
@@ -91,6 +107,10 @@ end tell`;
     await this.dictationMenu("Stop Dictation").catch(async () => {
       // Dictation that already ended on its own leaves nothing to stop.
     });
+  }
+
+  async holdKey(stroke: Keystroke, down: boolean): Promise<void> {
+    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", holdKeyScript(stroke, down)]);
   }
 }
 
@@ -113,7 +133,11 @@ export class GenericHost implements Host {
     this.options.log.debug("focusApp is not supported on this platform");
   }
 
-  async press(stroke: Keystroke): Promise<void> {
+  async press(...strokes: Keystroke[]): Promise<void> {
+    for (const stroke of strokes) await this.pressOne(stroke);
+  }
+
+  private async pressOne(stroke: Keystroke): Promise<void> {
     const modifiers = [
       stroke.control && "ctrl",
       stroke.shift && "shift",
@@ -134,6 +158,10 @@ export class GenericHost implements Host {
   }
 
   async stopDictation(): Promise<void> {}
+
+  async holdKey(): Promise<void> {
+    throw new Error("Holding keys is only supported on macOS");
+  }
 }
 
 export function createHost(options: HostOptions): Host {

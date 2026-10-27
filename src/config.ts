@@ -65,8 +65,12 @@ export interface Config {
   readonly brightness: number;
   /** Lights off after this long without activity; null never dims. */
   readonly autoDimMs: number | null;
-  /** How the Mic key records: macOS Dictation, or a dictation app's toggle shortcut. */
-  readonly mic: { readonly mode: "dictation" | "shortcut"; readonly shortcut: string };
+  /**
+   * How the Mic key records: macOS Dictation; `hold` keeps a key held while
+   * recording (Typeless and Wispr Flow use Fn); `shortcut` presses a toggle
+   * shortcut to start and again to stop.
+   */
+  readonly mic: { readonly mode: "dictation" | "hold" | "shortcut"; readonly shortcut: string };
   /** The shortcut that sends the composer (T3 Code's default send shortcut is Enter). */
   readonly sendShortcut: string;
   readonly logLevel: LogLevel;
@@ -142,7 +146,7 @@ export function loadConfig(path = defaultConfigPath()): Config {
       DEFAULT_CONFIG.autoDimMs,
     ),
     mic: {
-      mode: pick(raw.mic?.mode, (v) => v === "dictation" || v === "shortcut", "dictation"),
+      mode: pick(raw.mic?.mode, (v) => ["dictation", "hold", "shortcut"].includes(v), "dictation"),
       shortcut: pick(raw.mic?.shortcut, (v) => typeof v === "string", ""),
     },
     sendShortcut: pick(raw.sendShortcut, (v) => typeof v === "string" && v, "enter"),

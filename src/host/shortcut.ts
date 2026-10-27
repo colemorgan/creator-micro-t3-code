@@ -10,6 +10,8 @@ export interface Keystroke {
 }
 
 const NAMED: Record<string, string> = {
+  function: "fn",
+  globe: "fn",
   return: "enter",
   esc: "escape",
   up: "arrowup",
@@ -96,21 +98,84 @@ const MAC_KEY_CODES: Record<string, number> = {
   f12: 111,
 };
 
-const quote = (text: string) => `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+// Modifier keys post flagsChanged events with their flag set while held.
+const MODIFIER_KEYS: Record<string, { code: number; flag: number }> = {
+  fn: { code: 63, flag: 0x800000 },
+  command: { code: 55, flag: 0x100000 },
+  rightcommand: { code: 54, flag: 0x100000 },
+  shift: { code: 56, flag: 0x20000 },
+  rightshift: { code: 60, flag: 0x20000 },
+  option: { code: 58, flag: 0x80000 },
+  rightoption: { code: 61, flag: 0x80000 },
+  control: { code: 59, flag: 0x40000 },
+  rightcontrol: { code: 62, flag: 0x40000 },
+};
+const FLAGS = { command: 0x100000, shift: 0x20000, option: 0x80000, control: 0x40000 };
 
-/** The System Events statement that presses `stroke`. */
-export function appleScriptKeystroke(stroke: Keystroke): string {
-  const modifiers = [
-    stroke.command && "command down",
-    stroke.control && "control down",
-    stroke.shift && "shift down",
-    stroke.option && "option down",
-  ].filter(Boolean);
-  const using = modifiers.length ? ` using {${modifiers.join(", ")}}` : "";
-  const code = MAC_KEY_CODES[stroke.key];
-  if (code !== undefined) return `key code ${code}${using}`;
-  if ([...stroke.key].length !== 1) throw new Error(`Unsupported key "${stroke.key}"`);
-  return `keystroke ${quote(stroke.key)}${using}`;
+// US-layout virtual key codes for letters, digits and punctuation.
+const LETTER_CODES: Record<string, number> = {
+  a: 0, s: 1, d: 2, f: 3, h: 4, g: 5, z: 6, x: 7, c: 8, v: 9, b: 11, q: 12, w: 13, e: 14, r: 15,
+  y: 16, t: 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26,
+  "-": 27, "8": 28, "0": 29, "]": 30, o: 31, u: 32, "[": 33, i: 34, p: 35, l: 37, j: 38, "'": 39,
+  k: 40, ";": 41, "\\": 42, ",": 43, "/": 44, n: 45, m: 46, ".": 47, "`": 50,
+};
+
+function keyCodeOf(key: string): number {
+  const code = MODIFIER_KEYS[key]?.code ?? MAC_KEY_CODES[key] ?? LETTER_CODES[key];
+  if (code === undefined) throw new Error(`Unsupported key "${key}"`);
+  return code;
 }
+
+const flagsOf = (stroke: Keystroke) =>
+  (stroke.command ? FLAGS.command : 0) |
+  (stroke.shift ? FLAGS.shift : 0) |
+  (stroke.option ? FLAGS.option : 0) |
+  (stroke.control ? FLAGS.control : 0);
+
+// Events come from a HID-state source so they update the system's live
+// modifier state: apps that poll it (Typeless watching Fn) see the key held.
+const SOURCE = "const source = $.CGEventSourceCreate($.kCGEventSourceStateHIDSystemState);";
+
+const postEvent = (code: number, down: boolean, flags: number) =>
+  `{ const event = $.CGEventCreateKeyboardEvent(source, ${code}, ${down}); $.CGEventSetFlags(event, ${flags}); $.CGEventPost($.kCGHIDEventTap, event); }`;
+
+/**
+ * A JavaScript-for-Automation script that presses or releases `stroke` as a
+ * low-level event, which global hotkey listeners (dictation apps) see. Plain
+ * AppleScript can't hold a key down, and can't press Fn at all.
+ */
+export function holdKeyScript(stroke: Keystroke, down: boolean): string {
+  const modifier = MODIFIER_KEYS[stroke.key];
+  let flags = flagsOf(stroke);
+  if (modifier && down) flags |= modifier.flag;
+  return `ObjC.import("CoreGraphics");\n${SOURCE}\n${postEvent(keyCodeOf(stroke.key), down, flags)}`;
+}
+
+/**
+ * Presses `strokes` in order in the app with this bundle path once it's
+ * frontmost, pausing `gapSeconds` between them (menus need a moment to open),
+ * and fails rather than typing into whatever else has focus.
+ */
+export function pressScript(strokes: ReadonlyArray<Keystroke>, appPath: string, gapSeconds = 0.12): string {
+  const presses = strokes.map((stroke) => {
+    const code = keyCodeOf(stroke.key);
+    const flags = flagsOf(stroke);
+    return `${postEvent(code, true, flags)}\n${postEvent(code, false, flags)}`;
+  });
+  return `ObjC.import("AppKit");
+ObjC.import("CoreGraphics");
+${SOURCE}
+const target = $.NSBundle.bundleWithPath(${JSON.stringify(appPath)}).bundleIdentifier.js;
+let front = false;
+for (let i = 0; i < 60 && !front; i++) {
+  const app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
+  front = !app.isNil() && app.bundleIdentifier.js === target;
+  if (!front) delay(0.025);
+}
+if (!front) throw new Error("T3 Code did not come to the front");
+${presses.join(`\ndelay(${gapSeconds});\n`)}`;
+}
+
+const quote = (text: string) => `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 export const appleScriptString = quote;

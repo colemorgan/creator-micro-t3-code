@@ -65,16 +65,20 @@ export class FakeHost {
   async focusApp() {
     this.calls.push("focus");
   }
-  async press(stroke: { key: string; command: boolean; control: boolean; shift: boolean }) {
+  async press(...strokes: Array<{ key: string; command: boolean; control: boolean; shift: boolean }>) {
     // Report T3's "mod" the same way on every platform.
-    const mod = stroke.command || stroke.control ? "cmd+" : "";
-    this.calls.push(`press ${mod}${stroke.shift ? "shift+" : ""}${stroke.key}`);
+    const name = (stroke: (typeof strokes)[number]) =>
+      `${stroke.command || stroke.control ? "cmd+" : ""}${stroke.shift ? "shift+" : ""}${stroke.key}`;
+    this.calls.push(`press ${strokes.map(name).join(" ")}`);
   }
   async startDictation() {
     this.calls.push("dictation start");
   }
   async stopDictation() {
     this.calls.push("dictation stop");
+  }
+  async holdKey(stroke: { key: string }, down: boolean) {
+    this.calls.push(`${down ? "hold" : "release"} ${stroke.key}`);
   }
 }
 

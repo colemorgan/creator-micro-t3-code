@@ -93,6 +93,8 @@ export class Controller {
   private dimTimer: NodeJS.Timeout | null = null;
   private dimmed = false;
   private lastModel = "";
+  /** Fast mode as last set from the keyboard, per thread. */
+  private readonly fastState = new Map<string, boolean>();
 
   private readonly config: Config;
   private readonly environments: ReadonlyArray<T3Environment>;
@@ -440,9 +442,11 @@ export class Controller {
     const task =
       mic.mode === "shortcut"
         ? this.pressShortcut(mic.shortcut)
-        : recording
-          ? this.host.startDictation()
-          : this.host.stopDictation();
+        : mic.mode === "hold"
+          ? this.holdKey(mic.shortcut, recording)
+          : recording
+            ? this.host.startDictation()
+            : this.host.stopDictation();
     task.catch((error) => {
       this.log.warn(`could not ${recording ? "start" : "stop"} dictation`, error);
       if (recording) {
@@ -585,12 +589,23 @@ export class Controller {
     }
   }
 
-  private async runCommand(command: string): Promise<void> {
+  private shortcutFor(command: string): Keystroke | null {
     const environment =
       this.environmentOf(this.selected) ?? this.environments.find((candidate) => candidate.config);
     const binding = environment?.config?.keybindings.find((entry) => entry.command === command);
-    if (!binding) return this.unavailable(`no shortcut is bound to ${command}`);
-    await this.host.press(fromT3Shortcut(binding.shortcut));
+    return binding ? fromT3Shortcut(binding.shortcut) : null;
+  }
+
+  private async runCommand(command: string): Promise<void> {
+    const stroke = this.shortcutFor(command);
+    if (!stroke) return this.unavailable(`no shortcut is bound to ${command}`);
+    await this.host.press(stroke);
+  }
+
+  private async holdKey(text: string, down: boolean): Promise<void> {
+    const stroke = parseShortcut(text);
+    if (!stroke) throw new Error(`unrecognized key "${text}"`);
+    await this.host.holdKey(stroke, down);
   }
 
   private async pressShortcut(text: string): Promise<void> {
@@ -628,27 +643,49 @@ export class Controller {
     );
   }
 
-  /** Fast mode: Claude's `fastMode` switch, or Codex's priority service tier. */
+  /**
+   * Fast mode: Claude's `fastMode` switch, or Codex's priority service tier.
+   * The composer keeps its own copy of these options once you've touched its
+   * picker, so the change is made there too: Fast is the last group of the
+   * effort menu, reached with End and stepped to with ArrowUp.
+   */
   private async toggleFast(): Promise<void> {
     const target = this.threadOf(this.selected);
     if (!target) return this.unavailable("no thread selected");
+    const key = refKey(this.selected!);
     const descriptors = this.modelOptions(target.environment, target.thread);
     const boolean = descriptors.find((d) => d.type === "boolean" && /fast/i.test(`${d.id} ${d.label ?? ""}`));
     let enabled: boolean;
+    let stepsUp: number;
     if (boolean) {
-      enabled = this.currentValue(target.thread, boolean) !== true;
+      enabled = !(this.fastState.get(key) ?? this.currentValue(target.thread, boolean) === true);
+      // Menu items: On, Off.
+      stepsUp = enabled ? 1 : 0;
       await this.setOption(target.environment, target.thread, boolean.id, enabled);
     } else {
       const tier = descriptors.find(
         (d) => d.type === "select" && d.options?.some((o) => o.id === "priority" || /^fast$/i.test(o.label ?? "")),
       );
       if (!tier) return this.unavailable("this model has no fast mode");
-      const fast = tier.options!.find((o) => o.id === "priority" || /^fast$/i.test(o.label ?? ""))!;
-      const normal = tier.options!.find((o) => o.isDefault) ?? tier.options![0]!;
-      enabled = this.currentValue(target.thread, tier) !== fast.id;
-      await this.setOption(target.environment, target.thread, tier.id, enabled ? fast.id : normal.id);
+      const options = tier.options!;
+      const fast = options.find((o) => o.id === "priority" || /^fast$/i.test(o.label ?? ""))!;
+      const normal = options.find((o) => o.isDefault) ?? options[0]!;
+      enabled = !(this.fastState.get(key) ?? this.currentValue(target.thread, tier) === fast.id);
+      const choice = enabled ? fast : normal;
+      stepsUp = options.length - 1 - options.indexOf(choice);
+      await this.setOption(target.environment, target.thread, tier.id, choice.id);
     }
+    this.fastState.set(key, enabled);
     this.showFlash({ color: enabled ? 0xffd600 : 0x555555, effect: EFFECT.solid, keys: false });
+    const effort = this.shortcutFor("composer.effort");
+    if (!effort) return;
+    const arrow = parseShortcut("arrowup")!;
+    await this.host.press(
+      effort,
+      parseShortcut("end")!,
+      ...Array.from({ length: stepsUp }, () => arrow),
+      parseShortcut("enter")!,
+    );
   }
 
   private async stepEffort(step: 1 | -1): Promise<void> {

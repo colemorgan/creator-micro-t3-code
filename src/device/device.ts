@@ -50,7 +50,7 @@ interface DeviceEvents {
 }
 
 const POLL_MS = 2_000;
-const RETRY_AFTER_FAILURE_MS = 10_000;
+const RETRY_AFTER_FAILURE_MS = 3_000;
 const RPC_TIMEOUT_MS = 2_500;
 const STATUS_POLL_MS = 60_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -113,11 +113,11 @@ export class CodexMicroDevice extends EventEmitter<DeviceEvents> {
   }
 
   /** Leaves the pad dark rather than frozen on stale thread states. */
-  async stop(): Promise<void> {
+  async stop({ blank = true }: { blank?: boolean } = {}): Promise<void> {
     this.stopped = true;
     if (this.pollTimer) clearTimeout(this.pollTimer);
     if (this.statusTimer) clearInterval(this.statusTimer);
-    if (this.hid) {
+    if (this.hid && blank) {
       await Promise.race([this.write(DARK_FRAME), sleep(1_000)]).catch(() => {});
     }
     await this.disconnect();
@@ -137,7 +137,7 @@ export class CodexMicroDevice extends EventEmitter<DeviceEvents> {
   private flushLighting(): Promise<void> {
     return this.enqueue(async () => {
       const frame = this.wanted;
-      if (!this.hid || !frame || isDeepEqual(frame, this.applied)) return;
+      if (!this.hid || !this.framing || !frame || isDeepEqual(frame, this.applied)) return;
       await this.write(frame);
     }).catch((error) => {
       this.applied = null;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { EFFECT, lightingFrame, STATUS_COLORS, ZONE_OFF } from "../src/device/lighting.ts";
-import { appleScriptKeystroke, fromT3Shortcut, parseShortcut } from "../src/host/shortcut.ts";
+import { fromT3Shortcut, parseShortcut, pressScript } from "../src/host/shortcut.ts";
 import { assignSlots, candidateThreads, EMPTY_SLOTS, threadStatus } from "../src/model/slots.ts";
 import { thread } from "./fixtures.ts";
 
@@ -158,15 +158,22 @@ test("shortcuts parse and become System Events statements", () => {
   assert.equal(parseShortcut("mod+enter", false)?.control, true);
   assert.equal(parseShortcut("ctrl++", true)?.key, "+");
   assert.equal(parseShortcut("hyper+x", true), null);
-  assert.equal(appleScriptKeystroke(parseShortcut("enter")!), "key code 36");
-  assert.equal(
-    appleScriptKeystroke(parseShortcut("cmd+shift+[", true)!),
-    'keystroke "[" using {command down, shift down}',
-  );
+  const enter = pressScript([parseShortcut("enter")!], "/Applications/T3 Code (Beta).app");
+  assert.match(enter, /bundleWithPath\("\/Applications\/T3 Code \(Beta\)\.app"\)/);
+  assert.match(enter, /CGEventCreateKeyboardEvent\(source, 36, true\)[\s\S]*CGEventCreateKeyboardEvent\(source, 36, false\)/);
+  assert.match(pressScript([parseShortcut("cmd+shift+[", true)!], "/x.app"), /source, 33, true\); \$\.CGEventSetFlags\(event, 1179648\)/);
   const stroke = fromT3Shortcut(
     { key: "b", metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, modKey: true },
     true,
   );
-  assert.equal(appleScriptKeystroke(stroke), 'keystroke "b" using {command down}');
-  assert.equal(appleScriptKeystroke(parseShortcut('cmd+"', true)!), 'keystroke "\\"" using {command down}');
+  assert.match(pressScript([stroke], "/x.app"), /source, 11, true\); \$\.CGEventSetFlags\(event, 1048576\)/);
+  assert.throws(() => pressScript([parseShortcut("cmd+ü", true)!], "/x.app"), /Unsupported key/);
+});
+
+test("hold scripts post Fn as a flags change with the Fn flag while held", async () => {
+  const { holdKeyScript } = await import("../src/host/shortcut.ts");
+  const fn = parseShortcut("fn", true)!;
+  assert.match(holdKeyScript(fn, true), /CGEventCreateKeyboardEvent\(source, 63, true\)[\s\S]*CGEventSetFlags\(event, 8388608\)/);
+  assert.match(holdKeyScript(fn, false), /CGEventSetFlags\(event, 0\)/);
+  assert.match(holdKeyScript(parseShortcut("ctrl+space", true)!, true), /source, 49, true\)[\s\S]*262144/);
 });

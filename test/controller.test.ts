@@ -44,6 +44,7 @@ const CODEX = {
   ],
 };
 const KEYBINDINGS = [
+  { command: "composer.effort", shortcut: { key: "e", metaKey: false, ctrlKey: false, shiftKey: true, altKey: false, modKey: true } },
   { command: "sidebar.toggle", shortcut: { key: "b", metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, modKey: true } },
 ];
 
@@ -162,6 +163,16 @@ test("fast toggles Claude's fastMode and Codex's priority tier on the selected t
   assert.deepEqual((environment.dispatched[1]?.modelSelection as any).options, [
     { id: "serviceTier", value: "priority" },
   ]);
+  // The composer's own copy: open the effort menu, go to the end, step to the item.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(host.calls.filter((call) => call.startsWith("press")), [
+    "press cmd+shift+e end arrowup enter", // Claude: On, [Off]
+    "press cmd+shift+e end enter", // Codex: Standard, [Fast]
+  ]);
+  press(controller, "AG00");
+  press(controller, "ACT06");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(host.calls.at(-1), "press cmd+shift+e end enter", "second press turns Claude's back off");
 });
 
 test("the knob in reasoning mode steps effort; clockwise lowers it", async () => {
@@ -244,6 +255,14 @@ test("mic: hold to talk, or double-tap to latch and tap to stop", () => {
   assert.deepEqual(host.calls, ["dictation start"], "latched");
   controller.handleInput({ type: "key", key: "ACT10", act: 1 });
   assert.deepEqual(host.calls, ["dictation start", "dictation stop"]);
+});
+
+test("mic hold mode holds the configured key while recording", () => {
+  const { controller } = setup([thread({ id: "a" })], { mic: { mode: "hold", shortcut: "fn" } });
+  controller.handleInput({ type: "key", key: "ACT10", act: 1 });
+  mock.timers.tick(1_200);
+  controller.handleInput({ type: "key", key: "ACT10", act: 0 });
+  assert.deepEqual(host.calls, ["hold fn", "release fn"]);
 });
 
 test("send, stop and fork", async () => {
