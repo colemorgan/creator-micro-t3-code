@@ -1,0 +1,27 @@
+{
+  "name": "codex-micro-t3",
+  "version": "0.1.0",
+  "description": "Bridge the Work Louder Codex Micro / Creator Micro to T3 Code",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "codex-micro-t3": "./src/cli.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/cli.ts run",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-hid": "^3.4.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2"
+  }
+}

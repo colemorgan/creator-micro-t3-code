@@ -1,0 +1,224 @@
+// Codex Micro vendor HID channel (usage page 0xFF00, report id 6). Each report
+// carries [channel, payloadLength, ...payload]; channel 2 is newline-delimited
+// JSON-RPC, channel 1 firmware logs.
+//
+// Framing, endpoint selection and line parsing are adapted from Hormold's
+// T3 Code integration (MIT, https://github.com/pingdotgg/t3code/pull/23869).
+
+export const WORK_LOUDER_VENDOR_ID = 0x303a;
+export const CODEX_MICRO_PRODUCT_ID = 0x8360;
+export const VENDOR_USAGE_PAGE = 0xff00;
+
+const REPORT_ID = 6;
+const REPORT_SIZE = 64;
+const MAX_PAYLOAD = REPORT_SIZE - 3;
+export const CHANNEL_RPC = 2;
+
+/** Firmware only accepts ids in [0, 999). */
+export const MAX_RPC_ID = 999;
+
+export const RPC_METHODS = {
+  status: "device.status",
+  lightingConfig: "v.oai.rgbcfg",
+  slotLighting: "v.oai.thstatus",
+} as const;
+
+export const NOTIFY_METHODS = {
+  key: "v.oai.hid",
+  joystick: "v.oai.rad",
+} as const;
+
+/**
+ * How output reports are laid out for hidapi's `write`, whose first byte is
+ * the report id. `prefixed` sends report id 6 with the id repeated in the
+ * buffer (what Bluetooth needs and what hidapi sends on every platform);
+ * `unprefixed` sends a 63-byte body under report id 0. The device answers
+ * `device.status` only when framing is right, so the transport probes.
+ */
+export interface Framing {
+  readonly report: "prefixed" | "unprefixed";
+  /** FreeMicro terminates lines with CRLF; Hormold's integration sends bare JSON. */
+  readonly crlf: boolean;
+}
+
+export const FRAMINGS: ReadonlyArray<Framing> = [
+  { report: "prefixed", crlf: true },
+  { report: "prefixed", crlf: false },
+  { report: "unprefixed", crlf: true },
+];
+
+export function encodeRpcRequest(
+  method: string,
+  params: unknown,
+  id: number,
+  framing: Framing = FRAMINGS[0]!,
+): Uint8Array[] {
+  // The firmware JSON parser is ASCII-only.
+  const json =
+    JSON.stringify({ method, params, id }).replace(
+      /[^\x00-\x7f]/g,
+      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    ) + (framing.crlf ? "\r\n" : "");
+  const bytes = new TextEncoder().encode(json);
+  const reports: Uint8Array[] = [];
+  for (let offset = 0; offset < bytes.length; offset += MAX_PAYLOAD) {
+    const chunk = bytes.subarray(offset, offset + MAX_PAYLOAD);
+    const report = new Uint8Array(REPORT_SIZE);
+    report[0] = framing.report === "prefixed" ? REPORT_ID : 0;
+    report[1] = CHANNEL_RPC;
+    report[2] = chunk.length;
+    report.set(chunk, 3);
+    reports.push(report);
+  }
+  return reports;
+}
+
+export interface DecodedReport {
+  readonly channel: number;
+  readonly text: string;
+}
+
+/**
+ * Input reports arrive with or without the report id depending on the OS
+ * backend. A full-size report that starts with another id is keyboard, mouse
+ * or consumer input sharing the handle (Bluetooth), not vendor traffic.
+ */
+export function decodeReport(data: Uint8Array): DecodedReport | null {
+  const base = data[0] === REPORT_ID ? 1 : data.length === REPORT_SIZE - 1 ? 0 : -1;
+  if (base < 0) return null;
+  const channel = data[base];
+  const length = data[base + 1];
+  if (channel === undefined || length === undefined || length > MAX_PAYLOAD) return null;
+  return {
+    channel,
+    text: new TextDecoder().decode(data.subarray(base + 2, base + 2 + length)),
+  };
+}
+
+export interface HidCandidate {
+  readonly path?: string | undefined;
+  readonly vendorId: number;
+  readonly productId: number;
+  readonly usagePage?: number | undefined;
+  readonly release: number;
+}
+
+export type Transport = "usb" | "bluetooth";
+
+export interface Endpoint {
+  readonly path: string;
+  readonly transport: Transport;
+}
+
+/** The firmware sets the low two bits of bcdDevice for wireless links. */
+const transportOf = (device: HidCandidate): Transport =>
+  device.release % 4 === 0 ? "usb" : "bluetooth";
+
+/** Every reachable vendor endpoint, USB first: a cable is faster and never sleeps. */
+export function findEndpoints(devices: ReadonlyArray<HidCandidate>): Endpoint[] {
+  const matching = devices.filter(
+    (device) =>
+      device.path &&
+      device.vendorId === WORK_LOUDER_VENDOR_ID &&
+      device.productId === CODEX_MICRO_PRODUCT_ID,
+  );
+  // hidapi lists one entry per collection. When the platform reports usage
+  // pages, only the vendor collection is usable; otherwise take what's there.
+  const vendor = matching.some((device) => device.usagePage !== undefined && device.usagePage !== 0)
+    ? matching.filter((device) => device.usagePage === VENDOR_USAGE_PAGE)
+    : matching;
+  const seen = new Set<string>();
+  return vendor
+    .flatMap((device) => {
+      if (seen.has(device.path!)) return [];
+      seen.add(device.path!);
+      return [{ path: device.path!, transport: transportOf(device) }];
+    })
+    .sort((left, right) => Number(right.transport === "usb") - Number(left.transport === "usb"));
+}
+
+/**
+ * Keeps the open endpoint while it is still listed and nothing better is,
+ * otherwise names the endpoint to move to (or `null` when the device is gone).
+ */
+export function reconcileEndpoint(
+  current: Endpoint | null,
+  available: ReadonlyArray<Endpoint>,
+): { readonly keep: true } | { readonly keep: false; readonly next: Endpoint | null } {
+  const best = available[0] ?? null;
+  if (
+    current &&
+    available.some((endpoint) => endpoint.path === current.path) &&
+    (current.transport === "usb" || best?.transport !== "usb")
+  ) {
+    return { keep: true };
+  }
+  return { keep: false, next: best };
+}
+
+/** Reassembles newline-delimited lines per channel. */
+export class LineAssembler {
+  private readonly buffers = new Map<number, string>();
+
+  push(report: DecodedReport): string[] {
+    const parts = ((this.buffers.get(report.channel) ?? "") + report.text).split(/\r?\n/);
+    this.buffers.set(report.channel, parts.pop() ?? "");
+    return parts.map((line) => line.trim()).filter((line) => line.length > 0);
+  }
+
+  reset(): void {
+    this.buffers.clear();
+  }
+}
+
+export type RpcLine =
+  | {
+      readonly kind: "response";
+      readonly id: string;
+      readonly result: unknown;
+      readonly error: string | null;
+    }
+  | {
+      readonly kind: "notification";
+      readonly method: string;
+      readonly params: Record<string, unknown>;
+    };
+
+/** The firmware sometimes abbreviates `id/method/params` to `i/m/p`. */
+export function parseRpcLine(line: string): RpcLine | null {
+  let message: Record<string, unknown>;
+  try {
+    message = JSON.parse(line.slice(line.indexOf("{"))) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (typeof message !== "object" || message === null) return null;
+  const id = message.id ?? message.i;
+  if (id !== undefined && id !== null) {
+    const error = message.error as { message?: unknown } | undefined;
+    return {
+      kind: "response",
+      id: String(id),
+      result: message.result,
+      error: error ? String(error.message ?? "rpc error") : null,
+    };
+  }
+  const method = message.method ?? message.m;
+  if (typeof method !== "string") return null;
+  const params = (message.params ?? message.p ?? {}) as Record<string, unknown>;
+  return { kind: "notification", method, params };
+}
+
+/** Structural equality for the plain JSON-like values we diff before writing. */
+export function isDeepEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (typeof left !== "object" || typeof right !== "object" || left === null || right === null) {
+    return false;
+  }
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  return leftKeys.every((key) =>
+    isDeepEqual((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
+  );
+}
