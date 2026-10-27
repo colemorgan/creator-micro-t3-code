@@ -191,8 +191,11 @@ Shortcuts look like `cmd+shift+e`: modifiers joined by `+`, with the key last.
   `pagedown`, `arrowup`/`arrowdown`/`arrowleft`/`arrowright`, and `f1`–`f12`.
   `hold` mode also takes `fn` and the modifier keys on their own.
 
-The bridge only presses keys once T3 Code is the frontmost app, so it never
-types into another app.
+On macOS, the bridge only presses shortcuts once T3 Code is the frontmost
+app, so it never types them into another app. Push-to-talk in `hold` mode is
+the exception: it holds its key system-wide while recording, because
+dictation apps listen globally. On Linux, shortcuts go to whichever window is
+active.
 
 ## Commands
 

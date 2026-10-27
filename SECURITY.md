@@ -24,9 +24,11 @@ know:
   Prefer `https`, or a private network such as Tailscale, for remote servers,
   because the token travels in the WebSocket handshake.
 - **macOS permissions.** The app bundle needs Input Monitoring (to read the
-  keyboard) and Accessibility (to post key events). It only posts keys
-  while T3 Code is the frontmost app, and only holds a key while push-to-talk
-  is active.
+  keyboard) and Accessibility (to post key events). Shortcuts are only
+  posted once T3 Code is the frontmost app. The exception is push-to-talk in
+  `hold` mode: it holds its key (such as Fn) system-wide, because dictation
+  apps listen globally, and only while recording. On Linux, shortcuts go to
+  whichever window is active.
 - **Device.** CLI device calls are limited to read-only methods. The bridge
   never writes the keyboard's filesystem or firmware.
 - **App storage.** To follow the sidebar's project filter, the bridge reads

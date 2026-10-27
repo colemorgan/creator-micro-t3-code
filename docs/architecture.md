@@ -116,8 +116,9 @@ On Linux, threads open with `xdg-open` and shortcuts go through `wtype` or
 
 - **Never guess between threads.** Approve, decline and stop act on the
   selected thread, or on the only qualifying thread on the keys.
-- **Never type into the wrong app.** Shortcuts are only sent once T3 Code is
-  confirmed frontmost.
+- **Never type into the wrong app.** On macOS, shortcuts are only sent once
+  T3 Code is confirmed frontmost. Push-to-talk's held key is system-wide by
+  design, and the Linux host sends to the active window.
 - **Least privilege.** Tokens need only `orchestration:read` and
   `orchestration:operate`. Device calls from the CLI are limited to
   read-only methods.
