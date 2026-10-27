@@ -130,7 +130,8 @@ async function status() {
   for (const environment of environments) {
     console.log(
       environment.ready
-        ? `● ${environment.options.url}: ${environment.config!.label} (T3 Code ${environment.config!.serverVersion}), ${environment.threads.size} threads`
+        ? `● ${environment.options.url}: ${environment.config!.label} (T3 Code ${environment.config!.serverVersion}), ` +
+            `${environment.threads.size} threads, environment ${environment.environmentId}`
         : `○ ${environment.options.url}: not connected`,
     );
   }

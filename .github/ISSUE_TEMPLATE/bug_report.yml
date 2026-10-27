@@ -1,0 +1,36 @@
+name: Bug report
+description: Something on the keyboard or in T3 Code doesn't behave as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Switch to the Codex layer\n2. Press …"
+  - type: input
+    id: device
+    attributes:
+      label: Keyboard, connection and firmware
+      description: "From `node src/cli.ts session rpc device.status` (macOS) or `node src/cli.ts rpc device.status` (Linux)"
+      placeholder: Creator Micro 2, Bluetooth, 0.6.3-rc.19
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node and T3 Code versions
+      placeholder: macOS 27.0.1, Node 26.3, T3 Code (Beta) 0.1.3
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: From ~/Library/Logs/codex-micro-t3.log, ideally with "logLevel" set to "debug". Remove anything private, and never include tokens.
+      render: text
