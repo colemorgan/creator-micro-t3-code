@@ -17,12 +17,14 @@ import { fromT3Shortcut, parseShortcut, type Keystroke } from "./host/shortcut.t
 import type { Logger } from "./log.ts";
 import {
   assignSlots,
+  attentionQueue,
   candidateThreads,
   EMPTY_SLOTS,
   hasPendingApproval,
   isWorking,
   refKey,
   sameRef,
+  type ScopedThread,
   type Slot,
   type ThreadRef,
 } from "./model/slots.ts";
@@ -75,6 +77,8 @@ type MicState =
  */
 export class Controller {
   slots: ReadonlyArray<Slot> = EMPTY_SLOTS;
+  /** Every thread the keys draw from (sidebar filter applied), not just six. */
+  private candidates: ReadonlyArray<ScopedThread> = [];
   selected: ThreadRef | null = null;
   knobMode: KnobMode;
   /** The T3 Code sidebar's project filter key, or null for all projects. */
@@ -139,6 +143,7 @@ export class Controller {
       new Date(this.clock.now()).toISOString(),
       this.config.followSidebar ? { scope: this.scope, hideSettled: true } : {},
     );
+    this.candidates = threads;
     this.slots = assignSlots({
       threads,
       previous: this.slots,
@@ -361,6 +366,15 @@ export class Controller {
     this.openRef(next.ref!, false);
   }
 
+  /** Opens the thread after the current one in the attention queue, wrapping. */
+  private nextAttention() {
+    const queue = attentionQueue(this.candidates);
+    if (queue.length === 0) return this.unavailable("nothing needs you");
+    const position = queue.findIndex((entry) => sameRef(entry, this.selected));
+    const next = queue[(position + 1) % queue.length]!;
+    this.openRef({ environmentId: next.environmentId, threadId: next.threadId }, true);
+  }
+
   private turnKnob(direction: 1 | -1) {
     // Factory: clockwise is "previous"/up and "decrease reasoning".
     switch (this.knobMode) {
@@ -538,6 +552,8 @@ export class Controller {
         return this.host.focusApp();
       case "nextSlot":
         return this.stepSlot(1);
+      case "nextAttention":
+        return this.nextAttention();
       case "previousSlot":
         return this.stepSlot(-1);
       case "send":

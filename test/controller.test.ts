@@ -313,3 +313,31 @@ test("stopping the bridge mid-recording releases the held key", async () => {
   await controller.releaseHeldKeys();
   assert.deepEqual(host.calls, ["hold fn", "release fn"]);
 });
+
+test("next-attention steps through every thread that needs a look, beyond the six keys", async () => {
+  const at = (minute: number) => `2026-10-27T11:${String(minute).padStart(2, "0")}:00Z`;
+  const idle = Array.from({ length: 6 }, (_, i) => thread({ id: `idle${i}`, updatedAt: at(50 + i) }));
+  const { controller } = setup(
+    [
+      ...idle,
+      thread({ id: "ask", pendingRuntimeRequest: { id: "q", kind: "command_execution" }, updatedAt: at(1) }),
+      thread({ id: "busy", status: "running", updatedAt: at(2) }),
+      thread({ id: "unread", latestRunCompletedAt: at(3), lastVisitedAt: at(0), updatedAt: at(3) }),
+    ],
+    { controls: { ...DEFAULT_CONFIG.controls, ACT06: "nextAttention" } },
+  );
+  assert.ok(!controller.slots.some((slot) => slot.ref?.threadId === "ask"), "not on a key");
+  assert.equal(controller.selected?.threadId, "unread");
+  for (let i = 0; i < 4; i++) {
+    press(controller, "ACT06");
+    mock.timers.tick(500);
+  }
+  // Queue: ask (needs you), unread, busy. "unread" was visited last, so it
+  // was the thread on screen and the first press moved past it.
+  assert.deepEqual(host.calls, [
+    "open busy foreground",
+    "open ask foreground",
+    "open unread foreground",
+    "open busy foreground",
+  ]);
+});

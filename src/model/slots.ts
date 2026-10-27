@@ -246,3 +246,26 @@ export function assignSlots(input: {
       : EMPTY_SLOTS[index]!;
   });
 }
+
+/**
+ * Threads worth looking at, most urgent first: needs you, error, finished
+ * and unread, working; newest first within each. Idle threads aren't listed.
+ */
+const ATTENTION: Partial<Record<SlotStatus, number>> = {
+  "needs-input": 0,
+  error: 1,
+  done: 2,
+  working: 3,
+};
+
+export function attentionQueue(threads: ReadonlyArray<ScopedThread>): ScopedThread[] {
+  return threads
+    .map((entry) => ({ entry, rank: ATTENTION[threadStatus(entry.thread, entry.childNeedsInput)] }))
+    .filter((item): item is { entry: ScopedThread; rank: number } => item.rank !== undefined)
+    .toSorted(
+      (a, b) =>
+        a.rank - b.rank ||
+        b.entry.thread.updatedAt.localeCompare(a.entry.thread.updatedAt),
+    )
+    .map(({ entry }) => entry);
+}

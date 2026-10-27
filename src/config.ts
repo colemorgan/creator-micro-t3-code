@@ -24,6 +24,7 @@ export type ActionName =
   | "togglePlanMode"
   | "increaseEffort"
   | "decreaseEffort"
+  | "nextAttention"
   | "nextSlot"
   | "previousSlot"
   | "focusApp"

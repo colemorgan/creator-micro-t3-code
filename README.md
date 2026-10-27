@@ -83,7 +83,9 @@ holds tokens). Everything except `environments` is optional:
 }
 ```
 
-Actions: `fast`, `approve`, `approveForSession`, `decline`, `stop`, `fork`,
+Actions: `nextAttention` (open the next thread that needs a look: needs you,
+error, finished and unread, then working; across every thread in the sidebar's
+filter, not just the six on keys), `fast`, `approve`, `approveForSession`, `decline`, `stop`, `fork`,
 `mic`, `send`, `togglePlanMode`, `increaseEffort`, `decreaseEffort`,
 `nextSlot`, `previousSlot`, `focusApp`, `none`, `command:<T3 keybinding id>`
 (e.g. `command:terminal.toggle`), or `keys:<shortcut>` (e.g. `keys:cmd+shift+e`).
