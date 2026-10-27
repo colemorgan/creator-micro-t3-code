@@ -54,9 +54,14 @@ export interface EnvironmentEntry {
 
 export interface Config {
   readonly environments: ReadonlyArray<EnvironmentEntry>;
-  /** The desktop app to drive: its name for `open -a`, and its URL scheme. */
-  readonly app: { readonly name: string; readonly scheme: string };
+  /**
+   * The desktop app to drive: its name for `open -a`, its URL scheme, and its
+   * data folder in ~/Library/Application Support (for the sidebar's filter).
+   */
+  readonly app: { readonly name: string; readonly scheme: string; readonly dataDir: string };
   readonly agentSource: AgentSource;
+  /** Follow the T3 Code sidebar: its project filter, and hiding settled threads. */
+  readonly followSidebar: boolean;
   /** `environmentId/threadId` hard-assigned to agent keys 1–6. */
   readonly pins: ReadonlyArray<string | null>;
   readonly knobMode: KnobMode;
@@ -92,8 +97,9 @@ export const DEFAULT_CONTROLS: Readonly<Record<ControlId, ActionName>> = {
 
 export const DEFAULT_CONFIG: Config = {
   environments: [],
-  app: { name: "T3 Code (Beta)", scheme: "t3code" },
+  app: { name: "T3 Code (Beta)", scheme: "t3code", dataDir: "t3code-v2" },
   agentSource: "recent",
+  followSidebar: true,
   pins: [null, null, null, null, null, null],
   knobMode: "navigation",
   controls: DEFAULT_CONTROLS,
@@ -128,8 +134,10 @@ export function loadConfig(path = defaultConfigPath()): Config {
     app: {
       name: pick(raw.app?.name, (v) => typeof v === "string" && v, DEFAULT_CONFIG.app.name),
       scheme: pick(raw.app?.scheme, (v) => typeof v === "string" && v, DEFAULT_CONFIG.app.scheme),
+      dataDir: pick(raw.app?.dataDir, (v) => typeof v === "string" && v, DEFAULT_CONFIG.app.dataDir),
     },
     agentSource: pick(raw.agentSource, (v) => AGENT_SOURCES.includes(v), DEFAULT_CONFIG.agentSource),
+    followSidebar: pick(raw.followSidebar, (v) => typeof v === "boolean", true),
     pins: Array.from({ length: 6 }, (_, index) =>
       typeof raw.pins?.[index] === "string" ? raw.pins[index] : null,
     ),

@@ -56,6 +56,17 @@ export interface ThreadShell {
   readonly lastVisitedAt?: string | null;
 }
 
+export interface ProjectShell {
+  readonly id: string;
+  readonly title: string;
+  readonly workspaceRoot: string;
+  readonly repositoryIdentity?: {
+    readonly canonicalKey: string;
+    readonly rootPath?: string | null;
+    readonly origin?: { readonly canonicalKey?: string } | null;
+  } | null;
+}
+
 export interface Shortcut {
   readonly key: string;
   readonly metaKey: boolean;

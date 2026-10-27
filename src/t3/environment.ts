@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 
 import type { Logger } from "../log.ts";
 import { RpcConnection } from "./rpc.ts";
-import type { Keybinding, ProviderInfo, ThreadShell } from "./types.ts";
+import type { Keybinding, ProjectShell, ProviderInfo, ThreadShell } from "./types.ts";
 
 interface EnvironmentEvents {
   /** Threads, connection or config changed. */
@@ -16,6 +16,8 @@ export interface EnvironmentConfig {
   readonly serverVersion: string;
   readonly keybindings: ReadonlyArray<Keybinding>;
   readonly providers: ReadonlyArray<ProviderInfo>;
+  /** The "No project" workspace. */
+  readonly scratchWorkspaceRoot: string | null;
 }
 
 export interface EnvironmentOptions {
@@ -31,6 +33,7 @@ export interface EnvironmentOptions {
 export class T3Environment extends EventEmitter<EnvironmentEvents> {
   readonly rpc: RpcConnection;
   readonly threads = new Map<string, ThreadShell>();
+  readonly projects = new Map<string, ProjectShell>();
   config: EnvironmentConfig | null = null;
   private sequence = -1;
   private synced = false;
@@ -75,6 +78,8 @@ export class T3Environment extends EventEmitter<EnvironmentEvents> {
         serverVersion: String(value.environment.serverVersion ?? ""),
         keybindings: Array.isArray(value.keybindings) ? value.keybindings : [],
         providers: Array.isArray(value.providers) ? value.providers : [],
+        scratchWorkspaceRoot:
+          typeof value.scratchWorkspaceRoot === "string" ? value.scratchWorkspaceRoot : null,
       };
       this.options.log.info(
         `environment ${this.config.label || this.config.environmentId} (T3 Code ${this.config.serverVersion})`,
@@ -92,8 +97,15 @@ export class T3Environment extends EventEmitter<EnvironmentEvents> {
       switch (item.kind) {
         case "snapshot": {
           // A snapshot carrying resolvedRepositoryIdentityRoots only refreshes
-          // projects; the plain one is authoritative for threads.
-          if (item.resolvedRepositoryIdentityRoots !== undefined) break;
+          // projects; the plain one is authoritative for everything.
+          const projects = item.snapshot.projects as ProjectShell[] | undefined;
+          if (item.resolvedRepositoryIdentityRoots !== undefined) {
+            for (const project of projects ?? []) this.projects.set(project.id, project);
+            changed = true;
+            break;
+          }
+          this.projects.clear();
+          for (const project of projects ?? []) this.projects.set(project.id, project);
           this.threads.clear();
           for (const thread of item.snapshot.threads as ThreadShell[]) {
             this.threads.set(thread.id, thread);
@@ -115,8 +127,15 @@ export class T3Environment extends EventEmitter<EnvironmentEvents> {
           changed = this.threads.delete(item.threadId) || changed;
           break;
         case "project.updated":
+          if (item.sequence <= this.sequence) break;
+          this.sequence = item.sequence;
+          this.projects.set(item.project.id, item.project);
+          changed = true;
+          break;
         case "project.removed":
-          if (item.sequence > this.sequence) this.sequence = item.sequence;
+          if (item.sequence <= this.sequence) break;
+          this.sequence = item.sequence;
+          changed = this.projects.delete(item.projectId) || changed;
           break;
       }
     }

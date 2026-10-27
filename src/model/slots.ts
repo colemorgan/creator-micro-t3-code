@@ -1,5 +1,6 @@
 import type { SlotStatus } from "../device/lighting.ts";
-import type { ThreadShell } from "../t3/types.ts";
+import type { ProjectShell, ThreadShell } from "../t3/types.ts";
+import { projectScopeKeys } from "./scope.ts";
 
 export const SLOT_COUNT = 6;
 
@@ -84,16 +85,42 @@ export function hasUnseenCompletion(thread: ThreadShell): boolean {
   return Number.isNaN(visitedAt) || completedAt > visitedAt;
 }
 
+export interface CandidateSource {
+  readonly environmentId: string;
+  readonly threads: Iterable<ThreadShell>;
+  readonly projects?: Iterable<ProjectShell>;
+  readonly scratchWorkspaceRoot?: string | null;
+}
+
+export interface CandidateOptions {
+  /** The sidebar's project filter key, or null for every project. */
+  readonly scope?: string | null;
+  /** Leave out settled threads unless they're working or need you, as the sidebar does. */
+  readonly hideSettled?: boolean;
+}
+
 /**
  * Threads that can go on a key: visible top-level threads. Subagent children
  * stay off the keys, but one waiting on the user lights its parent.
  */
 export function candidateThreads(
-  environments: ReadonlyArray<{ environmentId: string; threads: Iterable<ThreadShell> }>,
+  environments: ReadonlyArray<CandidateSource>,
   now: string,
+  options: CandidateOptions = {},
 ): ScopedThread[] {
   const result: ScopedThread[] = [];
-  for (const { environmentId, threads } of environments) {
+  for (const { environmentId, threads, projects, scratchWorkspaceRoot } of environments) {
+    const scope = options.scope ?? null;
+    const inScope =
+      scope === null
+        ? null
+        : new Set(
+            [...(projects ?? [])]
+              .filter((project) =>
+                projectScopeKeys(environmentId, project, scratchWorkspaceRoot ?? null).has(scope),
+              )
+              .map((project) => project.id),
+          );
     const all = [...threads];
     const parentsWaiting = new Set<string>();
     for (const thread of all) {
@@ -112,6 +139,11 @@ export function candidateThreads(
       if (thread.deletedAt || thread.archivedAt) continue;
       if (thread.lineage.relationshipToParent === "subagent") continue;
       if (thread.snoozedUntil && thread.snoozedUntil > now) continue;
+      if (inScope && !inScope.has(thread.projectId)) continue;
+      if (options.hideSettled && thread.settledAt !== null) {
+        const status = threadStatus(thread, parentsWaiting.has(thread.id));
+        if (status !== "working" && status !== "needs-input") continue;
+      }
       result.push({
         environmentId,
         threadId: thread.id,

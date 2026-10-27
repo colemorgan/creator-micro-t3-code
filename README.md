@@ -16,7 +16,7 @@ Factory Codex layout, mapped to T3 Code:
 
 | Control | Action |
 |---|---|
-| Agent keys 1–6 | Six threads (most recently updated, across all your T3 Code servers). Colour shows status: white idle, blue working, green finished and unread, amber needs you, red error. The selected thread breathes. Tap to open it in the background; double-tap to bring T3 Code forward. |
+| Agent keys 1–6 | Six threads across all your T3 Code servers, following the sidebar: when it's filtered to a project, only that project's threads; settled threads only while they're working or need you. Colour shows status: white idle, blue working, green finished and unread, amber needs you, red error. The selected thread breathes. Tap to open it in the background; double-tap to bring T3 Code forward. |
 | FAST | Toggle Fast mode on the selected thread (Claude Fast Mode, Codex priority tier) |
 | APPR / REJ | Approve or decline the selected thread's pending request (or the only waiting one on the keys) |
 | SPLIT | Fork the selected thread and open the fork |
@@ -62,8 +62,9 @@ holds tokens). Everything except `environments` is optional:
 ```jsonc
 {
   "environments": [{ "url": "http://127.0.0.1:3773", "token": "…" }],
-  "app": { "name": "T3 Code (Beta)", "scheme": "t3code" },
+  "app": { "name": "T3 Code (Beta)", "scheme": "t3code", "dataDir": "t3code-v2" },
   "agentSource": "recent",           // or "priority" (needs-you first), "pinned"
+  "followSidebar": true,              // mirror the sidebar's project filter and hide settled threads
   "pins": [null, null, null, null, null, null], // "environmentId/threadId" per key
   "knobMode": "navigation",           // or "reasoning", "agents"
   "brightness": 1,
@@ -109,6 +110,10 @@ Logs: `~/Library/Logs/codex-micro-t3.log`.
   a bearer token; `orchestration.subscribeShell` for thread state and
   `orchestration.dispatchCommand` for approve, interrupt, fork, plan mode and
   model options.
+- **Sidebar filter** (`src/host/sidebarScope.ts`): the app keeps the
+  project filter in its localStorage (LevelDB under
+  `~/Library/Application Support/t3code-v2`); the bridge reads the newest
+  write and matches it to projects the way the sidebar groups them.
 - **App** (`src/host`): `t3code://threads/<env>/<thread>` links open threads;
   CoreGraphics key events press T3 Code shortcuts (only once it's frontmost)
   and hold Fn for dictation apps.

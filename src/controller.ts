@@ -77,6 +77,8 @@ export class Controller {
   slots: ReadonlyArray<Slot> = EMPTY_SLOTS;
   selected: ThreadRef | null = null;
   knobMode: KnobMode;
+  /** The T3 Code sidebar's project filter key, or null for all projects. */
+  scope: string | null = null;
   private selectedAt = 0;
   private selectionChangedAt = 0;
   private voice: VoiceState = "idle";
@@ -131,8 +133,11 @@ export class Controller {
       ready.map((environment) => ({
         environmentId: environment.environmentId!,
         threads: environment.threads.values(),
+        projects: environment.projects.values(),
+        scratchWorkspaceRoot: environment.config?.scratchWorkspaceRoot ?? null,
       })),
       new Date(this.clock.now()).toISOString(),
+      this.config.followSidebar ? { scope: this.scope, hideSettled: true } : {},
     );
     this.slots = assignSlots({
       threads,
@@ -161,6 +166,13 @@ export class Controller {
     } else if (latest && latest.at > this.selectedAt) {
       this.selectedAt = latest.at;
     }
+  }
+
+  /** Follows the sidebar's project filter. */
+  setScope(scope: string | null): void {
+    if (scope === this.scope) return;
+    this.scope = scope;
+    this.refresh();
   }
 
   private select(ref: ThreadRef | null, at = this.clock.now()) {

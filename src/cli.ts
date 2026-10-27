@@ -8,6 +8,7 @@ import { CodexMicroDevice, listEndpoints, sleep } from "./device/device.ts";
 import { lightingFrame, STATUS_COLORS } from "./device/lighting.ts";
 import { RPC_METHODS } from "./device/protocol.ts";
 import { createHost } from "./host/host.ts";
+import { SidebarScopeWatcher } from "./host/sidebarScope.ts";
 import {
   APP_DIR,
   APP_NAME,
@@ -71,6 +72,13 @@ async function run() {
   });
   for (const environment of environments) environment.start();
   device.start();
+  let sidebar: SidebarScopeWatcher | null = null;
+  if (config.followSidebar && process.platform === "darwin") {
+    sidebar = new SidebarScopeWatcher(config.app.dataDir, log);
+    sidebar.on("change", (scope) => controller.setScope(scope));
+    sidebar.start();
+    controller.scope = sidebar.current;
+  }
   controller.refresh();
 
   let stopping = false;
@@ -80,6 +88,7 @@ async function run() {
     log.info("stopping");
     await controller.releaseHeldKeys();
     controller.dispose();
+    sidebar?.stop();
     for (const environment of environments) environment.stop();
     await device.stop();
     process.exit(0);
@@ -128,8 +137,17 @@ async function status() {
   const noop = { setLighting: async () => {}, invalidateLighting() {} };
   const host = createHost({ appName: config.app.name, scheme: config.app.scheme, log });
   const controller = new Controller(config, environments, noop, host, log);
+  if (config.followSidebar && process.platform === "darwin") {
+    const sidebar = new SidebarScopeWatcher(config.app.dataDir, log);
+    sidebar.start();
+    sidebar.stop();
+    controller.scope = sidebar.current;
+  }
   controller.refresh();
-  console.log(`\nAgent keys (${config.agentSource}):`);
+  const scope = controller.scope === null ? "all projects" : JSON.stringify(controller.scope);
+  console.log(
+    `\nAgent keys (${config.agentSource}${config.followSidebar ? `, sidebar: ${scope}, settled hidden` : ""}):`,
+  );
   for (const slot of controller.slots) {
     const mark = slot.ref && controller.selected?.threadId === slot.ref.threadId ? "▶" : " ";
     console.log(` ${mark} ${slot.index + 1}. ${slot.status.padEnd(11)} ${slot.title ?? "—"}`);

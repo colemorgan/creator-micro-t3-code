@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 
-import type { ThreadShell } from "../src/t3/types.ts";
+import type { ProjectShell, ThreadShell } from "../src/t3/types.ts";
 
 export function thread(overrides: Partial<ThreadShell> = {}): ThreadShell {
   return {
@@ -30,6 +30,7 @@ export function thread(overrides: Partial<ThreadShell> = {}): ThreadShell {
 /** Stands in for `T3Environment` in controller tests. */
 export class FakeEnvironment extends EventEmitter {
   readonly threads = new Map<string, ThreadShell>();
+  readonly projects = new Map<string, ProjectShell>();
   readonly dispatched: Array<Record<string, unknown>> = [];
   config: any;
   readonly environmentId: string;
