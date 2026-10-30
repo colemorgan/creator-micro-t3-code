@@ -17,7 +17,9 @@ It drives T3 Code through the T3 Code server's API and a few app shortcuts.
 
 > **Status:** early (0.1). It's used daily on macOS with a Creator Micro 2
 > over Bluetooth and T3 Code 0.1.3. Other setups should work, but nobody has
-> tested them yet. [Reports are welcome](https://github.com/colemorgan/creator-micro-t3-code/issues).
+> tested them yet. If you try it, please
+> [file a setup report](https://github.com/colemorgan/creator-micro-t3-code/issues/new?template=setup_report.yml),
+> whether it worked or not.
 
 ## What the keys do
 
@@ -70,8 +72,9 @@ pnpm install
 ```
 
 Connect it to T3 Code. For each server you use (the desktop app's own server
-listens on port 3773), create a token that can only read and operate threads,
-then pair it:
+listens on port 3773), create a token that can only read and operate threads.
+Run `t3 auth session issue` on the machine that runs that server, then run
+`pair` here, on the machine with the keyboard:
 
 ```sh
 t3 auth session issue --scope orchestration:read --scope orchestration:operate \
@@ -79,6 +82,9 @@ t3 auth session issue --scope orchestration:read --scope orchestration:operate \
 node src/cli.ts pair http://127.0.0.1:3773 <token>
 node src/cli.ts pair http://<remote-host>:3773 <token>   # optional, per remote server
 ```
+
+The bridge expects the **T3 Code (Beta)** app. If you use another build, set
+`app.name` in the config first: see [Configuration](docs/configuration.md#app).
 
 The token travels in the connection handshake. For a remote server, use
 `https://`, or plain `http://` only over a private network you trust, such as
@@ -110,6 +116,77 @@ node src/cli.ts session doctor         # device check, light test, live input
 ```
 
 Logs are in `~/Library/Logs/codex-micro-t3.log`.
+
+## Setup on Linux
+
+Linux support is untested so far. Clone, install and pair as above, then:
+
+1. Install `xdg-utils` (agent keys open threads with `xdg-open`), and
+   `wtype` (Wayland) or `xdotool` (X11) for keyboard shortcuts.
+   `wtype` needs a compositor with the virtual-keyboard protocol, such as
+   Sway or Hyprland. GNOME and KDE Plasma don't offer it to `wtype`, so on
+   their Wayland sessions the keyboard shortcuts don't work. The lights,
+   Approve, Decline and Split still do. Fast still changes the setting, but
+   the composer may keep showing the old value.
+2. Let your user open the keyboard. `/dev/hidraw*` is root-only by default.
+   Create `/etc/udev/rules.d/70-creator-micro.rules`:
+
+   ```
+   # USB
+   KERNEL=="hidraw*", ATTRS{idVendor}=="303a", TAG+="uaccess"
+   # Bluetooth
+   KERNEL=="hidraw*", KERNELS=="*:303A:*", TAG+="uaccess"
+   ```
+
+   Then run `sudo udevadm control --reload && sudo udevadm trigger`, and
+   reconnect the keyboard.
+3. Check it, then run it:
+
+   ```sh
+   node src/cli.ts doctor
+   node src/cli.ts run
+   ```
+
+To start it with your desktop session, create a systemd user unit at
+`~/.config/systemd/user/creator-micro-t3.service`. Replace the paths with
+your own `which node` and clone location:
+
+```ini
+[Unit]
+Description=Creator Micro bridge for T3 Code
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/node %h/creator-micro-t3-code/src/cli.ts run
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
+```
+
+The unit needs `WAYLAND_DISPLAY` or `DISPLAY` from your session, or
+shortcuts go nowhere. Check with `systemctl --user show-environment`. If
+they're missing, run this from your compositor's startup, for example with
+`exec-once` in Hyprland:
+
+```sh
+systemctl --user import-environment WAYLAND_DISPLAY DISPLAY && systemctl --user restart creator-micro-t3
+```
+
+Then run `systemctl --user enable --now creator-micro-t3`. Logs are in
+`journalctl --user -u creator-micro-t3`.
+
+## Feedback
+
+This is a young project with few users, so every report helps:
+
+- **[Setup report](https://github.com/colemorgan/creator-micro-t3-code/issues/new?template=setup_report.yml)**:
+  how setup went on your keyboard and OS, whether it worked or not.
+- **[Bug report](https://github.com/colemorgan/creator-micro-t3-code/issues/new?template=bug_report.yml)**:
+  something doesn't behave as documented.
+- **[Feature request](https://github.com/colemorgan/creator-micro-t3-code/issues/new?template=feature_request.yml)**:
+  an action or mapping you'd like.
 
 ## Documentation
 

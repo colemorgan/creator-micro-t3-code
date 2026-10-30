@@ -1,0 +1,54 @@
+name: Setup report
+description: Tell us how setup went, whether it worked or not
+labels: [setup-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the bridge. Reports from setups nobody has tested yet help the most. Never include tokens or your config file.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did it work?
+      options:
+        - Yes, everything I tried works
+        - Partly. Some keys or features don't work
+        - No, I couldn't get it running
+    validations:
+      required: true
+  - type: dropdown
+    id: keyboard
+    attributes:
+      label: Keyboard
+      options:
+        - Creator Micro 2
+        - Codex Micro
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - USB
+        - Bluetooth
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node and T3 Code versions
+      placeholder: macOS 27.0.1, Node 26.3, T3 Code (Beta) 0.1.3
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was confusing, slow or missing?
+      description: Steps in the README that were unclear, errors you hit, things you had to work out yourself.
+  - type: textarea
+    id: broken
+    attributes:
+      label: What didn't work?
+      description: Which keys or features, and what happened instead. For a detailed problem, a separate bug report is welcome too.

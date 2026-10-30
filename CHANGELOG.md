@@ -6,6 +6,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Linux setup steps (udev rule and systemd user unit), and a setup report
+  issue template for feedback.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added
