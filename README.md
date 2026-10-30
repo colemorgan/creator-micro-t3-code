@@ -163,6 +163,12 @@ Restart=on-failure
 WantedBy=graphical-session.target
 ```
 
+The unit needs `WAYLAND_DISPLAY` or `DISPLAY` from your session, or
+shortcuts go nowhere. Check with `systemctl --user show-environment`. If
+they're missing, run
+`systemctl --user import-environment WAYLAND_DISPLAY DISPLAY` from your
+compositor's startup, for example with `exec-once` in Hyprland.
+
 Then run `systemctl --user enable --now creator-micro-t3`. Logs are in
 `journalctl --user -u creator-micro-t3`.
 
