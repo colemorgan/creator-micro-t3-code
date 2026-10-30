@@ -123,8 +123,9 @@ Linux support is untested so far. Clone, install and pair as above, then:
 
 1. Install `wtype` (Wayland) or `xdotool` (X11) for keyboard shortcuts.
    `wtype` needs a compositor with the virtual-keyboard protocol, such as
-   Sway, Hyprland or KDE. GNOME doesn't have it, so on GNOME Wayland the
-   keyboard shortcuts don't work. The lights and the server actions still do.
+   Sway or Hyprland. GNOME and KDE Plasma don't offer it to `wtype`, so on
+   their Wayland sessions the keyboard shortcuts don't work. The lights and
+   the server actions still do.
 2. Let your user open the keyboard. `/dev/hidraw*` is root-only by default.
    Create `/etc/udev/rules.d/70-creator-micro.rules`:
 
