@@ -121,11 +121,13 @@ Logs are in `~/Library/Logs/codex-micro-t3.log`.
 
 Linux support is untested so far. Clone, install and pair as above, then:
 
-1. Install `wtype` (Wayland) or `xdotool` (X11) for keyboard shortcuts.
+1. Install `xdg-utils` (agent keys open threads with `xdg-open`), and
+   `wtype` (Wayland) or `xdotool` (X11) for keyboard shortcuts.
    `wtype` needs a compositor with the virtual-keyboard protocol, such as
    Sway or Hyprland. GNOME and KDE Plasma don't offer it to `wtype`, so on
-   their Wayland sessions the keyboard shortcuts don't work. The lights and
-   the server actions still do.
+   their Wayland sessions the keyboard shortcuts don't work. The lights,
+   Approve, Decline and Split still do. Fast still changes the setting, but
+   the composer may keep showing the old value.
 2. Let your user open the keyboard. `/dev/hidraw*` is root-only by default.
    Create `/etc/udev/rules.d/70-creator-micro.rules`:
 
